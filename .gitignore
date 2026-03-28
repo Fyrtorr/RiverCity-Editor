@@ -1,0 +1,7 @@
+*.nes
+*.bak
+*.dll
+*.exe
+*.gif
+*.png
+output/

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>River City Ransom Editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>River City Ransom Editor</h1>
+        <div id="rom-controls">
+            <button id="btn-load" title="Load ROM">Load ROM</button>
+            <input type="file" id="file-input" accept=".nes" hidden>
+            <button id="btn-save" title="Save ROM" disabled>Save ROM</button>
+            <span id="rom-info"></span>
+        </div>
+    </header>
+
+    <nav id="tabs">
+        <button class="tab active" data-tab="npc-names">NPC Names</button>
+        <button class="tab" data-tab="npc-dialogue">NPC Dialogue</button>
+        <button class="tab" data-tab="shop-names">Shop Names</button>
+        <button class="tab" data-tab="shop-items">Shop Items</button>
+        <button class="tab" data-tab="shop-stock">Shop Stock</button>
+        <button class="tab" data-tab="bosses">Bosses &amp; Gangs</button>
+        <button class="tab" data-tab="locations">Locations</button>
+        <button class="tab" data-tab="misc-text">Misc Text</button>
+    </nav>
+
+    <main id="editor-area">
+        <div id="no-rom" class="placeholder">
+            <p>Load a River City Ransom ROM to begin editing.</p>
+            <p class="hint">Drag &amp; drop a .nes file or click "Load ROM"</p>
+        </div>
+
+        <div id="tab-npc-names" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel">
+                    <div class="list-header">NPC Names <span class="count"></span></div>
+                    <ul class="item-list" id="npc-names-list"></ul>
+                </div>
+                <div class="edit-panel" id="npc-names-edit">
+                    <label>Name:
+                        <input type="text" id="npc-name-input" maxlength="11" disabled>
+                        <span class="char-counter" id="npc-name-counter"></span>
+                    </label>
+                    <div class="edit-actions">
+                        <button id="npc-name-update" disabled>Update</button>
+                        <button id="npc-name-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-npc-dialogue" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel">
+                    <div class="list-header">NPC Dialogue <span class="count"></span></div>
+                    <ul class="item-list" id="npc-dialogue-list"></ul>
+                </div>
+                <div class="edit-panel" id="npc-dialogue-edit">
+                    <label>Dialogue:
+                        <textarea id="npc-dialogue-input" rows="4" disabled></textarea>
+                        <span class="char-counter" id="npc-dialogue-counter"></span>
+                    </label>
+                    <div class="special-chars">
+                        <span title="Newline">^ = newline</span>
+                        <span title="No indent">\ = no indent</span>
+                        <span title="Player 1 name">@ = char name 1</span>
+                        <span title="Player 2 name">~ = char name 2</span>
+                        <span title="Object name">| = object name</span>
+                    </div>
+                    <div class="edit-actions">
+                        <button id="npc-dialogue-update" disabled>Update</button>
+                        <button id="npc-dialogue-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-shop-items" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel wide">
+                    <div class="list-header">Shop Items <span class="count"></span></div>
+                    <ul class="item-list" id="shop-items-list"></ul>
+                </div>
+                <div class="edit-panel" id="shop-items-edit">
+                    <label>Name:
+                        <input type="text" id="item-name-input" maxlength="11" disabled>
+                        <span class="char-counter" id="item-name-counter"></span>
+                    </label>
+                    <label>Cost:
+                        <input type="text" id="item-cost-input" maxlength="8" disabled>
+                    </label>
+                    <div class="stats-grid" id="stats-grid">
+                        <label>Punch: <input type="number" class="stat-input" data-stat="P" min="0" max="255" disabled></label>
+                        <label>Kick: <input type="number" class="stat-input" data-stat="K" min="0" max="255" disabled></label>
+                        <label>Weapon: <input type="number" class="stat-input" data-stat="WN" min="0" max="255" disabled></label>
+                        <label>Throw: <input type="number" class="stat-input" data-stat="TH" min="0" max="255" disabled></label>
+                        <label>Agility: <input type="number" class="stat-input" data-stat="AG" min="0" max="255" disabled></label>
+                        <label>Defence: <input type="number" class="stat-input" data-stat="D" min="0" max="255" disabled></label>
+                        <label>Strength: <input type="number" class="stat-input" data-stat="SG" min="0" max="255" disabled></label>
+                        <label>Will Power: <input type="number" class="stat-input" data-stat="WP" min="0" max="255" disabled></label>
+                        <label>Stamina: <input type="number" class="stat-input" data-stat="ST" min="0" max="255" disabled></label>
+                    </div>
+                    <div class="edit-actions">
+                        <button id="item-update" disabled>Update</button>
+                        <button id="item-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-shop-stock" class="tab-content" hidden>
+            <div class="stock-layout">
+                <div class="list-panel">
+                    <div class="list-header">Shop Stock Lists <span class="count"></span> <span class="readonly-badge">Read Only</span></div>
+                    <div id="shop-stock-tree" class="stock-tree"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-shop-names" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel">
+                    <div class="list-header">Shop Names <span class="count"></span></div>
+                    <ul class="item-list" id="shop-names-list"></ul>
+                </div>
+                <div class="edit-panel" id="shop-names-edit">
+                    <label>Shop Name:
+                        <input type="text" id="shop-name-input" disabled>
+                        <span class="char-counter" id="shop-name-counter"></span>
+                    </label>
+                    <div class="special-chars"><span>^ = newline in name display</span></div>
+                    <div class="edit-actions">
+                        <button id="shop-name-update" disabled>Update</button>
+                        <button id="shop-name-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-bosses" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel">
+                    <div class="list-header">Bosses &amp; Gangs</div>
+                    <ul class="item-list" id="bosses-list"></ul>
+                </div>
+                <div class="edit-panel" id="bosses-edit">
+                    <div id="boss-fields"></div>
+                    <div class="edit-actions">
+                        <button id="boss-update" disabled>Update</button>
+                        <button id="boss-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-locations" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel">
+                    <div class="list-header">Locations <span class="count"></span></div>
+                    <ul class="item-list" id="locations-list"></ul>
+                </div>
+                <div class="edit-panel" id="locations-edit">
+                    <div id="location-fields"></div>
+                    <div class="edit-actions">
+                        <button id="loc-update" disabled>Update</button>
+                        <button id="loc-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-misc-text" class="tab-content" hidden>
+            <div class="list-edit-layout">
+                <div class="list-panel">
+                    <div class="list-header">Misc Text <span class="count"></span></div>
+                    <ul class="item-list" id="misc-text-list"></ul>
+                </div>
+                <div class="edit-panel" id="misc-text-edit">
+                    <label>Text:
+                        <textarea id="misc-text-input" rows="4" disabled></textarea>
+                        <span class="char-counter" id="misc-text-counter"></span>
+                    </label>
+                    <div class="edit-actions">
+                        <button id="misc-text-update" disabled>Update</button>
+                        <button id="misc-text-revert" disabled>Revert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="hex-panel">
+        <div id="hex-header">
+            <span id="hex-title">Hex View</span>
+            <span id="hex-location"></span>
+        </div>
+        <div id="hex-split">
+            <div class="hex-pane">
+                <div class="hex-pane-label">Original</div>
+                <div class="hex-content" id="hex-original">
+                    <div class="hex-placeholder">Select an item to view its ROM data</div>
+                </div>
+            </div>
+            <div class="hex-divider"></div>
+            <div class="hex-pane">
+                <div class="hex-pane-label">Current</div>
+                <div class="hex-content" id="hex-current">
+                    <div class="hex-placeholder">Select an item to view its ROM data</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <span id="status">No ROM loaded</span>
+    </footer>
+
+    <script src="rcr-rom.js"></script>
+    <script src="editor.js"></script>
+</body>
+</html>
