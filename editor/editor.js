@@ -1499,12 +1499,12 @@
 
         function onFrame(buffer) {
             frameBuffer = buffer;
-            // buffer is an array of 256*240 ints (0xRRGGBB)
+            // JSNES buffer is 256*240 ints but with R/B channels swapped (0xBBGGRR)
             for (let i = 0; i < 256 * 240; i++) {
                 const c = buffer[i];
-                emuImgData.data[i * 4] = (c >> 16) & 0xFF;
-                emuImgData.data[i * 4 + 1] = (c >> 8) & 0xFF;
-                emuImgData.data[i * 4 + 2] = c & 0xFF;
+                emuImgData.data[i * 4] = c & 0xFF;           // R (from low byte)
+                emuImgData.data[i * 4 + 1] = (c >> 8) & 0xFF; // G
+                emuImgData.data[i * 4 + 2] = (c >> 16) & 0xFF; // B (from high byte)
                 emuImgData.data[i * 4 + 3] = 255;
             }
             emuCtx.putImageData(emuImgData, 0, 0);
@@ -1649,13 +1649,12 @@
                 const flipH = spr.attr & 0x40;
                 const flipV = spr.attr & 0x80;
 
-                // Read sprite palette from PPU, using JSNES's own color table
-                const jsPal = nes.ppu.palTable.curTable;
+                // Read sprite palette from PPU
+                // JSNES stores pre-resolved colors with R/B swapped (0xBBGGRR)
                 const pal = [];
                 for (let c = 0; c < 4; c++) {
-                    const nesIdx = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
-                    const rgb32 = jsPal[nesIdx & 0x3F] || 0;
-                    pal.push([(rgb32 >> 16) & 0xFF, (rgb32 >> 8) & 0xFF, rgb32 & 0xFF]);
+                    const bgr32 = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
+                    pal.push([bgr32 & 0xFF, (bgr32 >> 8) & 0xFF, (bgr32 >> 16) & 0xFF]);
                 }
 
                 // Get tile data from PPU VRAM pattern tables
