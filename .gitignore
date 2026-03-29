@@ -5,3 +5,4 @@
 *.gif
 *.png
 output/
+node_modules/

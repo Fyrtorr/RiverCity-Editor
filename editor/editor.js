@@ -63,6 +63,7 @@
         const reader = new FileReader();
         reader.onload = () => {
             try {
+                romArrayBuffer = reader.result.slice(0); // keep a copy for the emulator
                 rom = RCR.parseROM(reader.result);
                 onROMLoaded(file.name);
             } catch (err) {
@@ -109,6 +110,7 @@
             populateLocations();
             populateCHRViewer();
             populateSpriteViewer();
+            initEmulator();
         } catch (err) {
             console.error('Error parsing ROM data:', err);
             status('Error parsing ROM: ' + err.message);
@@ -1469,6 +1471,248 @@
 
         bankSelect.addEventListener('change', renderSpriteSet);
         paletteSelect.addEventListener('change', renderSpriteSet);
+    }
+
+    // =============================================
+    // NES Emulator (JSNES)
+    // =============================================
+    let nes = null;
+    let emuRunning = false;
+    let emuRafId = null;
+    let romArrayBuffer = null; // store the raw ROM for the emulator
+
+    function initEmulator() {
+        const emuCanvas = $('#emu-canvas');
+        const emuCtx = emuCanvas.getContext('2d');
+        const emuImgData = emuCtx.createImageData(256, 240);
+        const btnPlay = $('#emu-play');
+        const btnPause = $('#emu-pause');
+        const btnReset = $('#emu-reset');
+        const btnCapture = $('#emu-capture');
+        const emuStatus = $('#emu-status');
+        const oamCanvas = $('#oam-canvas');
+        const oamCtx = oamCanvas.getContext('2d');
+        const oamInfo = $('#oam-info');
+
+        // Frame buffer from JSNES (256x240 pixels, each a 24-bit color)
+        let frameBuffer = null;
+
+        function onFrame(buffer) {
+            frameBuffer = buffer;
+            // buffer is an array of 256*240 ints (0xRRGGBB)
+            for (let i = 0; i < 256 * 240; i++) {
+                const c = buffer[i];
+                emuImgData.data[i * 4] = (c >> 16) & 0xFF;
+                emuImgData.data[i * 4 + 1] = (c >> 8) & 0xFF;
+                emuImgData.data[i * 4 + 2] = c & 0xFF;
+                emuImgData.data[i * 4 + 3] = 255;
+            }
+            emuCtx.putImageData(emuImgData, 0, 0);
+        }
+
+        // Audio stub (required by JSNES but we don't need sound)
+        function onAudioSample(left, right) {}
+
+        function createNES() {
+            nes = new jsnes.NES({
+                onFrame: onFrame,
+                onAudioSample: onAudioSample,
+            });
+        }
+
+        function loadROM() {
+            if (!romArrayBuffer) return false;
+            createNES();
+            // JSNES expects a string where each char is a byte
+            const data = new Uint8Array(romArrayBuffer);
+            let romStr = '';
+            for (let i = 0; i < data.length; i++) {
+                romStr += String.fromCharCode(data[i]);
+            }
+            nes.loadROM(romStr);
+            return true;
+        }
+
+        function emuLoop() {
+            if (!emuRunning || !nes) return;
+            nes.frame();
+            emuRafId = requestAnimationFrame(emuLoop);
+        }
+
+        btnPlay.addEventListener('click', () => {
+            if (!nes) {
+                if (!loadROM()) {
+                    emuStatus.textContent = 'No ROM loaded';
+                    return;
+                }
+            }
+            emuRunning = true;
+            btnPlay.disabled = true;
+            btnPause.disabled = false;
+            btnReset.disabled = false;
+            btnCapture.disabled = false;
+            emuStatus.textContent = 'Running';
+            emuLoop();
+        });
+
+        btnPause.addEventListener('click', () => {
+            emuRunning = false;
+            if (emuRafId) cancelAnimationFrame(emuRafId);
+            btnPlay.disabled = false;
+            btnPause.disabled = true;
+            emuStatus.textContent = 'Paused';
+        });
+
+        btnReset.addEventListener('click', () => {
+            emuRunning = false;
+            if (emuRafId) cancelAnimationFrame(emuRafId);
+            if (loadROM()) {
+                emuRunning = true;
+                btnPlay.disabled = true;
+                btnPause.disabled = false;
+                emuStatus.textContent = 'Running';
+                emuLoop();
+            }
+        });
+
+        // Keyboard input
+        const keyMap = {
+            'ArrowUp':    [1, jsnes.Controller.BUTTON_UP],
+            'ArrowDown':  [1, jsnes.Controller.BUTTON_DOWN],
+            'ArrowLeft':  [1, jsnes.Controller.BUTTON_LEFT],
+            'ArrowRight': [1, jsnes.Controller.BUTTON_RIGHT],
+            'z':          [1, jsnes.Controller.BUTTON_A],
+            'Z':          [1, jsnes.Controller.BUTTON_A],
+            'x':          [1, jsnes.Controller.BUTTON_B],
+            'X':          [1, jsnes.Controller.BUTTON_B],
+            'Enter':      [1, jsnes.Controller.BUTTON_START],
+            'Shift':      [1, jsnes.Controller.BUTTON_SELECT],
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (!nes || !emuRunning) return;
+            const mapping = keyMap[e.key];
+            if (mapping) {
+                nes.buttonDown(mapping[0], mapping[1]);
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (!nes || !emuRunning) return;
+            const mapping = keyMap[e.key];
+            if (mapping) {
+                nes.buttonUp(mapping[0], mapping[1]);
+                e.preventDefault();
+            }
+        });
+
+        // OAM Capture
+        btnCapture.addEventListener('click', () => {
+            if (!nes) return;
+
+            // Pause for capture
+            const wasRunning = emuRunning;
+            emuRunning = false;
+            if (emuRafId) cancelAnimationFrame(emuRafId);
+            btnPlay.disabled = false;
+            btnPause.disabled = true;
+            emuStatus.textContent = 'Paused (OAM captured)';
+
+            // Read OAM from PPU - JSNES stores sprite RAM in ppu.spriteMem (256 bytes)
+            const oam = nes.ppu.spriteMem;
+            const sprites = [];
+            for (let i = 0; i < 64; i++) {
+                const y = oam[i * 4];
+                const tile = oam[i * 4 + 1];
+                const attr = oam[i * 4 + 2];
+                const x = oam[i * 4 + 3];
+                // Skip hidden sprites (Y >= 0xEF)
+                if (y >= 0xEF) continue;
+                sprites.push({ y: y + 1, tile, attr, x, index: i });
+            }
+
+            // Render captured sprites on the OAM canvas
+            oamCtx.imageSmoothingEnabled = false;
+            oamCanvas.width = 512;
+            oamCanvas.height = 300;
+            oamCtx.fillStyle = '#111';
+            oamCtx.fillRect(0, 0, 512, 300);
+
+            // Draw sprites at their actual screen positions (scaled 2x)
+            const SCALE = 2;
+            const spriteSize = nes.ppu.f_spriteSize ? 16 : 8; // 8x8 or 8x16 mode
+
+            for (const spr of sprites) {
+                // Get palette from attribute bits 0-1
+                const palIdx = spr.attr & 0x03;
+                const flipH = spr.attr & 0x40;
+                const flipV = spr.attr & 0x80;
+
+                // Read sprite palette from PPU sprPalette
+                const pal = [];
+                for (let c = 0; c < 4; c++) {
+                    const nesColor = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
+                    pal.push(RCR.NES_PALETTE[nesColor & 0x3F] || [0, 0, 0]);
+                }
+
+                // Get tile data from PPU VRAM pattern tables
+                const tileCount = spriteSize === 16 ? 2 : 1;
+
+                for (let t = 0; t < tileCount; t++) {
+                    let tileAddr;
+                    if (spriteSize === 16) {
+                        const bank = (spr.tile & 1) * 0x1000;
+                        tileAddr = bank + (spr.tile & 0xFE) * 16 + t * 16;
+                    } else {
+                        const bank = nes.ppu.f_spPatternTable * 0x1000;
+                        tileAddr = bank + spr.tile * 16;
+                    }
+
+                    // Decode tile from PPU vramMem
+                    const tmp = new OffscreenCanvas(8, 8);
+                    const tmpCtx = tmp.getContext('2d');
+                    const imgData = tmpCtx.createImageData(8, 8);
+
+                    for (let py = 0; py < 8; py++) {
+                        const lo = nes.ppu.vramMem[tileAddr + py];
+                        const hi = nes.ppu.vramMem[tileAddr + 8 + py];
+                        for (let px = 0; px < 8; px++) {
+                            const bit0 = (lo >> (7 - px)) & 1;
+                            const bit1 = (hi >> (7 - px)) & 1;
+                            const ci = (bit1 << 1) | bit0;
+                            const [r, g, b] = pal[ci];
+                            const idx = (py * 8 + px) * 4;
+                            imgData.data[idx] = r;
+                            imgData.data[idx + 1] = g;
+                            imgData.data[idx + 2] = b;
+                            imgData.data[idx + 3] = ci === 0 ? 0 : 255;
+                        }
+                    }
+                    tmpCtx.putImageData(imgData, 0, 0);
+
+                    // Draw with flip
+                    const dx = spr.x * SCALE;
+                    const tileY = flipV ? (tileCount - 1 - t) : t;
+                    const dy = (spr.y + tileY * 8) * SCALE;
+
+                    oamCtx.save();
+                    if (flipH || flipV) {
+                        oamCtx.translate(
+                            dx + (flipH ? 8 * SCALE : 0),
+                            dy + (flipV ? 8 * SCALE : 0)
+                        );
+                        oamCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+                        oamCtx.drawImage(tmp, 0, 0, 8 * SCALE, 8 * SCALE);
+                    } else {
+                        oamCtx.drawImage(tmp, dx, dy, 8 * SCALE, 8 * SCALE);
+                    }
+                    oamCtx.restore();
+                }
+            }
+
+            oamInfo.textContent = `Captured ${sprites.length} visible sprites (${spriteSize === 16 ? '8x16' : '8x8'} mode)`;
+        });
     }
 
     // Hex view for CHR banks (similar to showHex but for CHR data)

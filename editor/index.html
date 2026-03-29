@@ -28,6 +28,7 @@
         <button class="tab" data-tab="misc-text">Misc Text</button>
         <button class="tab" data-tab="chr-tiles">CHR Tiles</button>
         <button class="tab" data-tab="sprites">Sprites</button>
+        <button class="tab" data-tab="emulator">Emulator</button>
     </nav>
 
     <main id="editor-area">
@@ -244,6 +245,31 @@
                 </div>
             </div>
         </div>
+
+        <div id="tab-emulator" class="tab-content" hidden>
+            <div class="emu-layout">
+                <div class="emu-screen-panel">
+                    <div class="emu-controls">
+                        <button id="emu-play">Play</button>
+                        <button id="emu-pause" disabled>Pause</button>
+                        <button id="emu-reset" disabled>Reset</button>
+                        <button id="emu-capture" disabled>Capture OAM</button>
+                        <span class="emu-status" id="emu-status">Load a ROM to start</span>
+                    </div>
+                    <div class="emu-canvas-wrap">
+                        <canvas id="emu-canvas" width="256" height="240"></canvas>
+                    </div>
+                    <div class="emu-keys">
+                        Arrows = D-pad | Z = A | X = B | Enter = Start | Shift = Select
+                    </div>
+                </div>
+                <div class="emu-capture-panel">
+                    <div class="chr-preview-label">OAM Sprites (64 max)</div>
+                    <canvas id="oam-canvas" width="512" height="300"></canvas>
+                    <div class="chr-tile-info" id="oam-info">Click "Capture OAM" during gameplay</div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <div id="hex-panel">
@@ -272,6 +298,7 @@
         <span id="status">No ROM loaded</span>
     </footer>
 
+    <script src="jsnes.min.js"></script>
     <script src="rcr-rom.js"></script>
     <script src="editor.js"></script>
 </body>
