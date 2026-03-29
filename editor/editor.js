@@ -14,6 +14,7 @@
     let shopNames = [];
     let miscText = [];
     let locations = [];
+    let romPalettes = [];
 
     // --- DOM refs ---
     const $ = (sel) => document.querySelector(sel);
@@ -78,6 +79,7 @@
 
         // Snapshot original bank data for hex diff view
         originalPrg = rom.prg.map(bank => Uint8Array.from(bank));
+        originalChr = rom.chr.map(bank => Uint8Array.from(bank));
 
         try {
             // Parse all data
@@ -92,6 +94,7 @@
             shopNames = RCR.readShopNames(rom);
             miscText = RCR.readMiscText(rom);
             locations = RCR.readLocations(rom);
+            romPalettes = RCR.readROMPalettes(rom);
 
             // Populate editors
             populateNPCNames();
@@ -102,6 +105,7 @@
             populateShopNames();
             populateMiscText();
             populateLocations();
+            populateCHRViewer();
         } catch (err) {
             console.error('Error parsing ROM data:', err);
             status('Error parsing ROM: ' + err.message);
@@ -157,8 +161,9 @@
     const hexCurrent = $('#hex-current');
     const hexLocation = $('#hex-location');
 
-    // Snapshot of original PRG banks, taken at ROM load time
+    // Snapshots of original bank data, taken at ROM load time
     let originalPrg = [];
+    let originalChr = [];
 
     // Sync scroll between the two panes
     let scrollSyncing = false;
@@ -180,8 +185,8 @@
     // Render hex for one pane.
     // bankData: the Uint8Array of bank bytes to display
     // compareData: the other pane's bytes (to detect diffs), or null
-    function renderHexPane(bankData, compareData, bankIndex, viewStart, viewEnd, hlMap) {
-        const absBase = RCR.HEADER_SIZE + bankIndex * RCR.PRG_BANK_SIZE;
+    function renderHexPane(bankData, compareData, bankIndex, viewStart, viewEnd, hlMap, absBaseOverride) {
+        const absBase = absBaseOverride != null ? absBaseOverride : (RCR.HEADER_SIZE + bankIndex * RCR.PRG_BANK_SIZE);
         let html = '';
 
         for (let row = viewStart; row < viewEnd; row += 16) {
@@ -1091,6 +1096,244 @@
         });
 
         btnRevert.addEventListener('click', () => { if (selectedIdx >= 0) selectLocation(selectedIdx); });
+    }
+
+    // =============================================
+    // CHR Tile Viewer
+    // =============================================
+    function populateCHRViewer() {
+        const bankSelect = $('#chr-bank-select');
+        const paletteSelect = $('#chr-palette-select');
+        const gridCanvas = $('#chr-grid-canvas');
+        const detailCanvas = $('#chr-detail-canvas');
+        const tileInfo = $('#chr-tile-info');
+        const palPreview = $('#chr-palette-preview');
+
+        const gridCtx = gridCanvas.getContext('2d');
+        const detailCtx = detailCanvas.getContext('2d');
+
+        const COLS = 16;
+        const ROWS = 32;
+        const SCALE = 2;
+        gridCanvas.width = COLS * 8 * SCALE;
+        gridCanvas.height = ROWS * 8 * SCALE;
+        detailCanvas.width = 256;
+        detailCanvas.height = 256;
+
+        let selectedTile = -1;
+        let currentPalette = RCR.GRAYSCALE_PALETTE;
+
+        // Populate bank selector
+        bankSelect.innerHTML = '';
+        for (let i = 0; i < rom.chrCount; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `Bank ${i}`;
+            bankSelect.appendChild(opt);
+        }
+
+        // Populate palette selector
+        paletteSelect.innerHTML = '<option value="-1">Grayscale</option>';
+        romPalettes.forEach((pal, i) => {
+            if (!pal) return;
+            const opt = document.createElement('option');
+            opt.value = i;
+            // Show sub-palette groups: each ROM palette has 4 sub-palettes of 4 colors
+            opt.textContent = `Palette ${i}`;
+            paletteSelect.appendChild(opt);
+        });
+
+        // Get the current 4-color sub-palette for rendering
+        // ROM palettes have 16 colors (4 sub-palettes of 4). We use sub-palette 0 by default,
+        // but let the user cycle through with the swatch clicks.
+        let subPaletteIndex = 0;
+
+        function getCurrentPalette() {
+            const palIdx = parseInt(paletteSelect.value);
+            if (palIdx < 0 || !romPalettes[palIdx]) return RCR.GRAYSCALE_PALETTE;
+            const pal = romPalettes[palIdx];
+            const base = subPaletteIndex * 4;
+            return [pal.colors[base], pal.colors[base + 1], pal.colors[base + 2], pal.colors[base + 3]];
+        }
+
+        function renderGrid() {
+            const bankIdx = parseInt(bankSelect.value);
+            const chrBank = rom.chr[bankIdx];
+            const pal = getCurrentPalette();
+
+            gridCtx.imageSmoothingEnabled = false;
+
+            // Render all 512 tiles to an offscreen canvas at 1x, then scale
+            const offscreen = new OffscreenCanvas(COLS * 8, ROWS * 8);
+            const offCtx = offscreen.getContext('2d');
+            const imgData = offCtx.createImageData(COLS * 8, ROWS * 8);
+            const data = imgData.data;
+
+            for (let t = 0; t < 512; t++) {
+                const pixels = RCR.decodeTile(chrBank, t);
+                const tileCol = t % COLS;
+                const tileRow = Math.floor(t / COLS);
+                const baseX = tileCol * 8;
+                const baseY = tileRow * 8;
+
+                for (let y = 0; y < 8; y++) {
+                    for (let x = 0; x < 8; x++) {
+                        const colorIdx = pixels[y * 8 + x];
+                        const [r, g, b] = pal[colorIdx];
+                        const px = ((baseY + y) * COLS * 8 + (baseX + x)) * 4;
+                        data[px] = r;
+                        data[px + 1] = g;
+                        data[px + 2] = b;
+                        data[px + 3] = colorIdx === 0 ? 40 : 255;
+                    }
+                }
+            }
+
+            offCtx.putImageData(imgData, 0, 0);
+            gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+            gridCtx.drawImage(offscreen, 0, 0, gridCanvas.width, gridCanvas.height);
+
+            // Draw selection highlight
+            if (selectedTile >= 0) {
+                const col = selectedTile % COLS;
+                const row = Math.floor(selectedTile / COLS);
+                gridCtx.strokeStyle = '#e94560';
+                gridCtx.lineWidth = 2;
+                gridCtx.strokeRect(col * 8 * SCALE, row * 8 * SCALE, 8 * SCALE, 8 * SCALE);
+            }
+        }
+
+        function renderDetail() {
+            detailCtx.imageSmoothingEnabled = false;
+            detailCtx.clearRect(0, 0, 256, 256);
+
+            if (selectedTile < 0) return;
+
+            const bankIdx = parseInt(bankSelect.value);
+            const chrBank = rom.chr[bankIdx];
+            const pal = getCurrentPalette();
+            const pixels = RCR.decodeTile(chrBank, selectedTile);
+
+            const imgData = detailCtx.createImageData(8, 8);
+            for (let i = 0; i < 64; i++) {
+                const colorIdx = pixels[i];
+                const [r, g, b] = pal[colorIdx];
+                imgData.data[i * 4] = r;
+                imgData.data[i * 4 + 1] = g;
+                imgData.data[i * 4 + 2] = b;
+                imgData.data[i * 4 + 3] = colorIdx === 0 ? 40 : 255;
+            }
+
+            // Draw at 32x scale
+            const tmp = new OffscreenCanvas(8, 8);
+            const tmpCtx = tmp.getContext('2d');
+            tmpCtx.putImageData(imgData, 0, 0);
+            detailCtx.drawImage(tmp, 0, 0, 256, 256);
+
+            // Draw grid lines
+            detailCtx.strokeStyle = 'rgba(255,255,255,0.1)';
+            detailCtx.lineWidth = 1;
+            for (let i = 1; i < 8; i++) {
+                const pos = i * 32;
+                detailCtx.beginPath();
+                detailCtx.moveTo(pos, 0); detailCtx.lineTo(pos, 256);
+                detailCtx.moveTo(0, pos); detailCtx.lineTo(256, pos);
+                detailCtx.stroke();
+            }
+        }
+
+        function updatePalettePreview() {
+            const pal = getCurrentPalette();
+            palPreview.innerHTML = '';
+            for (let i = 0; i < 4; i++) {
+                const swatch = document.createElement('div');
+                swatch.className = 'pal-swatch' + (i === subPaletteIndex % 4 ? '' : '');
+                swatch.style.background = `rgb(${pal[i][0]},${pal[i][1]},${pal[i][2]})`;
+                swatch.title = `Color ${i}: NES #${pal[i].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+                palPreview.appendChild(swatch);
+            }
+        }
+
+        function updateTileInfo() {
+            if (selectedTile < 0) {
+                tileInfo.textContent = 'Click a tile to inspect it';
+                return;
+            }
+            const bankIdx = parseInt(bankSelect.value);
+            const chrOffset = selectedTile * 16;
+            const romOffset = RCR.HEADER_SIZE + rom.prgCount * RCR.PRG_BANK_SIZE + bankIdx * RCR.CHR_BANK_SIZE + chrOffset;
+            tileInfo.innerHTML =
+                `Tile #${selectedTile} (0x${selectedTile.toString(16).toUpperCase()})<br>` +
+                `CHR Bank ${bankIdx}, Offset 0x${chrOffset.toString(16).toUpperCase()}<br>` +
+                `ROM: 0x${romOffset.toString(16).toUpperCase()}`;
+        }
+
+        function refresh() {
+            currentPalette = getCurrentPalette();
+            renderGrid();
+            renderDetail();
+            updatePalettePreview();
+            updateTileInfo();
+        }
+
+        // Events
+        bankSelect.addEventListener('change', () => { selectedTile = -1; refresh(); });
+        paletteSelect.addEventListener('change', refresh);
+
+        gridCanvas.addEventListener('click', (e) => {
+            const rect = gridCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / (rect.width / (COLS * 8));
+            const y = (e.clientY - rect.top) / (rect.height / (ROWS * 8));
+            const col = Math.floor(x / 8);
+            const row = Math.floor(y / 8);
+            selectedTile = row * COLS + col;
+            if (selectedTile >= 512) selectedTile = 511;
+            refresh();
+
+            // Show hex view of the tile's 16 bytes
+            const bankIdx = parseInt(bankSelect.value);
+            const chrOffset = selectedTile * 16;
+            const hl = [{ start: chrOffset, end: chrOffset + 8, type: 'ptr' },
+                        { start: chrOffset + 8, end: chrOffset + 16, type: 'string' }];
+            // Use a special hex view for CHR banks
+            showCHRHex(bankIdx, chrOffset, hl);
+        });
+
+        // Sub-palette cycling: click the palette preview area to cycle 0-3
+        palPreview.addEventListener('click', () => {
+            subPaletteIndex = (subPaletteIndex + 1) % 4;
+            refresh();
+        });
+
+        refresh();
+    }
+
+    // Hex view for CHR banks (similar to showHex but for CHR data)
+    function showCHRHex(chrBankIndex, centerOffset, highlights) {
+        if (!rom) return;
+        const currentBank = rom.chr[chrBankIndex];
+        const origBank = originalPrg.length > 0 ? originalChr[chrBankIndex] : currentBank;
+        const absBase = RCR.HEADER_SIZE + rom.prgCount * RCR.PRG_BANK_SIZE + chrBankIndex * RCR.CHR_BANK_SIZE;
+
+        let viewStart = Math.max(0, centerOffset - 16) & ~0xF;
+        let viewEnd = Math.min(currentBank.length, centerOffset + 32);
+        viewEnd = ((viewEnd + 15) & ~0xF);
+
+        const hlMap = {};
+        for (const h of highlights) {
+            for (let off = h.start; off < h.end; off++) hlMap[off] = h.type;
+        }
+
+        hexLocation.textContent = `CHR Bank ${chrBankIndex} | Tile Offset: 0x${centerOffset.toString(16).toUpperCase()} | ROM: 0x${(absBase + centerOffset).toString(16).toUpperCase()}`;
+
+        const legend = '<div class="hex-legend">'
+            + '<span class="hex-legend-item"><span class="hex-legend-swatch ptr"></span> Low Bitplane</span>'
+            + '<span class="hex-legend-item"><span class="hex-legend-swatch str"></span> High Bitplane</span>'
+            + '<span class="hex-legend-item"><span class="hex-legend-swatch changed"></span> Changed</span>'
+            + '</div>';
+
+        hexOriginal.innerHTML = legend + renderHexPane(origBank, currentBank, chrBankIndex, viewStart, viewEnd, hlMap, absBase);
+        hexCurrent.innerHTML = legend + renderHexPane(currentBank, origBank, chrBankIndex, viewStart, viewEnd, hlMap, absBase);
     }
 
     // --- Utility ---

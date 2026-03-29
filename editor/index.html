@@ -26,6 +26,7 @@
         <button class="tab" data-tab="bosses">Bosses &amp; Gangs</button>
         <button class="tab" data-tab="locations">Locations</button>
         <button class="tab" data-tab="misc-text">Misc Text</button>
+        <button class="tab" data-tab="chr-tiles">CHR Tiles</button>
     </nav>
 
     <main id="editor-area">
@@ -188,6 +189,32 @@
                         <button id="misc-text-update" disabled>Update</button>
                         <button id="misc-text-revert" disabled>Revert</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-chr-tiles" class="tab-content" hidden>
+            <div class="chr-layout">
+                <div class="chr-grid-panel">
+                    <div class="chr-toolbar">
+                        <label>CHR Bank:
+                            <select id="chr-bank-select"></select>
+                        </label>
+                        <label>Palette:
+                            <select id="chr-palette-select">
+                                <option value="-1">Grayscale</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="chr-grid-scroll">
+                        <canvas id="chr-grid-canvas" width="256" height="512"></canvas>
+                    </div>
+                </div>
+                <div class="chr-detail-panel">
+                    <div class="chr-preview-label">Selected Tile</div>
+                    <canvas id="chr-detail-canvas" width="256" height="256"></canvas>
+                    <div class="chr-tile-info" id="chr-tile-info">Click a tile to inspect it</div>
+                    <div class="chr-palette-preview" id="chr-palette-preview"></div>
                 </div>
             </div>
         </div>
