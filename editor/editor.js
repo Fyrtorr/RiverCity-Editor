@@ -1533,9 +1533,12 @@
             return true;
         }
 
+        let emuFrameCount = 0;
         function emuLoop() {
             if (!emuRunning || !nes) return;
             nes.frame();
+            emuFrameCount++;
+            if (emuFrameCount % 10 === 0) updateRAMDisplay();
             emuRafId = requestAnimationFrame(emuLoop);
         }
 
@@ -1714,6 +1717,192 @@
 
             oamInfo.textContent = `Captured ${sprites.length} visible sprites (${spriteSize === 16 ? '8x16' : '8x8'} mode)`;
         });
+
+        // --- Side panel tab switching ---
+        const sideTabs = document.querySelectorAll('.emu-side-tab');
+        sideTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                sideTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.emu-side-content').forEach(p => p.style.display = 'none');
+                $('#' + tab.dataset.panel).style.display = 'flex';
+            });
+        });
+
+        // --- RAM Viewer ---
+        const KNOWN_WATCHES = {
+            'ram-p1-stats': [
+                { addr: 0x049F, label: 'Punch' },
+                { addr: 0x04A3, label: 'Kick' },
+                { addr: 0x04A7, label: 'Weapon' },
+                { addr: 0x04AB, label: 'Throw' },
+                { addr: 0x04AF, label: 'Agility' },
+                { addr: 0x04B3, label: 'Defence' },
+                { addr: 0x04B7, label: 'Strength' },
+                { addr: 0x04BB, label: 'WillPower' },
+                { addr: 0x04BF, label: 'Stamina' },
+                { addr: 0x04C3, label: 'MaxPower' },
+            ],
+            'ram-p2-stats': [
+                { addr: 0x04A0, label: 'Punch' },
+                { addr: 0x04A4, label: 'Kick' },
+                { addr: 0x04A8, label: 'Weapon' },
+                { addr: 0x04AC, label: 'Throw' },
+                { addr: 0x04B0, label: 'Agility' },
+                { addr: 0x04B4, label: 'Defence' },
+                { addr: 0x04B8, label: 'Strength' },
+                { addr: 0x04BC, label: 'WillPower' },
+                { addr: 0x04C0, label: 'Stamina' },
+                { addr: 0x04C4, label: 'MaxPower' },
+            ],
+            'ram-p1-money': [
+                { addr: 0x04C7, label: 'Cents', fmt: 'bcd' },
+                { addr: 0x04C8, label: 'Dollars', fmt: 'bcd' },
+                { addr: 0x04C9, label: 'Hundreds' },
+            ],
+            'ram-p2-money': [
+                { addr: 0x04CA, label: 'Cents', fmt: 'bcd' },
+                { addr: 0x04CB, label: 'Dollars', fmt: 'bcd' },
+                { addr: 0x04CC, label: 'Hundreds' },
+            ],
+            'ram-game-state': [
+                { addr: 0x04F5, label: 'P1 Char ID' },
+                { addr: 0x04F6, label: 'P2 Char ID' },
+                { addr: 0x04F9, label: 'P1 Char Type' },
+                { addr: 0x04FA, label: 'P2 Char Type' },
+                { addr: 0x04E1, label: 'Location' },
+                { addr: 0x0519, label: 'Enemy Config' },
+                { addr: 0x064C, label: 'Difficulty' },
+            ],
+        };
+
+        const customWatches = [];
+        let prevRAMValues = {};
+
+        // Build static watch grids
+        for (const [gridId, watches] of Object.entries(KNOWN_WATCHES)) {
+            const grid = $('#' + gridId);
+            grid.innerHTML = '';
+            for (const w of watches) {
+                const el = document.createElement('div');
+                el.className = 'ram-entry';
+                el.innerHTML = `<span class="ram-label">${w.label}</span><span class="ram-value" data-addr="${w.addr}" data-fmt="${w.fmt || ''}">--</span>`;
+                grid.appendChild(el);
+            }
+        }
+
+        function updateRAMDisplay() {
+            if (!nes) return;
+            const mem = nes.cpu.mem;
+            document.querySelectorAll('.ram-value[data-addr]').forEach(el => {
+                const addr = parseInt(el.dataset.addr);
+                const val = mem[addr];
+                const prevKey = 'a' + addr;
+                const changed = prevRAMValues[prevKey] !== undefined && prevRAMValues[prevKey] !== val;
+                el.classList.toggle('changed', changed);
+                prevRAMValues[prevKey] = val;
+
+                if (el.dataset.fmt === 'bcd') {
+                    el.textContent = val.toString(16).padStart(2, '0');
+                } else {
+                    el.textContent = val + ' (0x' + val.toString(16).toUpperCase().padStart(2, '0') + ')';
+                }
+            });
+        }
+
+        // Custom watch
+        $('#ram-custom-add').addEventListener('click', () => {
+            const input = $('#ram-custom-addr');
+            const addrStr = input.value.trim().replace(/^0x/i, '').replace(/^\$/, '');
+            const addr = parseInt(addrStr, 16);
+            if (isNaN(addr) || addr < 0 || addr > 0xFFFF) { alert('Invalid address'); return; }
+            customWatches.push(addr);
+            const grid = $('#ram-custom');
+            const el = document.createElement('div');
+            el.className = 'ram-entry';
+            el.innerHTML = `<span class="ram-label">$${addr.toString(16).toUpperCase().padStart(4, '0')}</span><span class="ram-value" data-addr="${addr}">--</span>`;
+            grid.appendChild(el);
+            input.value = '';
+        });
+
+        $('#ram-custom-addr').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $('#ram-custom-add').click();
+        });
+
+        // RAM Search
+        let searchSnapshot = null;
+        let searchCandidates = null;
+        const btnSnapshot = $('#ram-search-snapshot');
+        const btnChanged = $('#ram-search-changed');
+        const btnUnchanged = $('#ram-search-unchanged');
+        const btnSearchReset = $('#ram-search-reset');
+        const searchInfo = $('#ram-search-info');
+        const searchResults = $('#ram-search-results');
+
+        btnSnapshot.addEventListener('click', () => {
+            if (!nes) return;
+            searchSnapshot = new Uint8Array(0x800);
+            for (let i = 0; i < 0x800; i++) searchSnapshot[i] = nes.cpu.mem[i];
+            if (!searchCandidates) {
+                searchCandidates = [];
+                for (let i = 0; i < 0x800; i++) searchCandidates.push(i);
+            }
+            btnChanged.disabled = false;
+            btnUnchanged.disabled = false;
+            btnSearchReset.disabled = false;
+            searchInfo.textContent = `Snapshot taken. ${searchCandidates.length} candidates. Now act in-game and click Find Changed/Unchanged.`;
+        });
+
+        btnChanged.addEventListener('click', () => {
+            if (!nes || !searchSnapshot) return;
+            searchCandidates = searchCandidates.filter(addr => nes.cpu.mem[addr] !== searchSnapshot[addr]);
+            showSearchResults();
+            // Take a new snapshot for the next comparison
+            for (let i = 0; i < 0x800; i++) searchSnapshot[i] = nes.cpu.mem[i];
+        });
+
+        btnUnchanged.addEventListener('click', () => {
+            if (!nes || !searchSnapshot) return;
+            searchCandidates = searchCandidates.filter(addr => nes.cpu.mem[addr] === searchSnapshot[addr]);
+            showSearchResults();
+            for (let i = 0; i < 0x800; i++) searchSnapshot[i] = nes.cpu.mem[i];
+        });
+
+        btnSearchReset.addEventListener('click', () => {
+            searchSnapshot = null;
+            searchCandidates = null;
+            searchResults.innerHTML = '';
+            btnChanged.disabled = true;
+            btnUnchanged.disabled = true;
+            btnSearchReset.disabled = true;
+            searchInfo.textContent = 'Take a snapshot, then perform an action in-game, then search.';
+        });
+
+        function showSearchResults() {
+            searchInfo.textContent = `${searchCandidates.length} candidates remaining.`;
+            searchResults.innerHTML = '';
+            const show = searchCandidates.slice(0, 50);
+            for (const addr of show) {
+                const el = document.createElement('div');
+                el.className = 'ram-entry';
+                const val = nes.cpu.mem[addr];
+                el.innerHTML = `<span class="ram-label">$${addr.toString(16).toUpperCase().padStart(4, '0')}</span><span class="ram-value">${val} (0x${val.toString(16).toUpperCase().padStart(2, '0')})</span>`;
+                el.style.cursor = 'pointer';
+                el.title = 'Click to add as custom watch';
+                el.addEventListener('click', () => {
+                    customWatches.push(addr);
+                    const grid = $('#ram-custom');
+                    const we = document.createElement('div');
+                    we.className = 'ram-entry';
+                    we.innerHTML = `<span class="ram-label">$${addr.toString(16).toUpperCase().padStart(4, '0')}</span><span class="ram-value" data-addr="${addr}">--</span>`;
+                    grid.appendChild(we);
+                });
+                searchResults.appendChild(el);
+            }
+            if (searchCandidates.length > 50) {
+                searchInfo.textContent += ` Showing first 50.`;
+            }
+        }
     }
 
     // Hex view for CHR banks (similar to showHex but for CHR data)

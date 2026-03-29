@@ -263,10 +263,56 @@
                         Arrows = D-pad | Z = A | X = B | Enter = Start | Shift = Select
                     </div>
                 </div>
-                <div class="emu-capture-panel">
-                    <div class="chr-preview-label">OAM Sprites (64 max)</div>
-                    <canvas id="oam-canvas" width="512" height="300"></canvas>
-                    <div class="chr-tile-info" id="oam-info">Click "Capture OAM" during gameplay</div>
+                <div class="emu-side-panel">
+                    <div class="emu-side-tabs">
+                        <button class="emu-side-tab active" data-panel="oam-panel">OAM Sprites</button>
+                        <button class="emu-side-tab" data-panel="ram-panel">RAM Viewer</button>
+                    </div>
+                    <div class="emu-side-content" id="oam-panel">
+                        <canvas id="oam-canvas" width="512" height="300"></canvas>
+                        <div class="chr-tile-info" id="oam-info">Click "Capture OAM" during gameplay</div>
+                    </div>
+                    <div class="emu-side-content" id="ram-panel" style="display:none">
+                        <div class="ram-section">
+                            <div class="ram-section-title">Player 1 Stats</div>
+                            <div class="ram-grid" id="ram-p1-stats"></div>
+                        </div>
+                        <div class="ram-section">
+                            <div class="ram-section-title">Player 2 Stats</div>
+                            <div class="ram-grid" id="ram-p2-stats"></div>
+                        </div>
+                        <div class="ram-section">
+                            <div class="ram-section-title">Player 1 Money</div>
+                            <div class="ram-grid" id="ram-p1-money"></div>
+                        </div>
+                        <div class="ram-section">
+                            <div class="ram-section-title">Player 2 Money</div>
+                            <div class="ram-grid" id="ram-p2-money"></div>
+                        </div>
+                        <div class="ram-section">
+                            <div class="ram-section-title">Game State</div>
+                            <div class="ram-grid" id="ram-game-state"></div>
+                        </div>
+                        <div class="ram-section">
+                            <div class="ram-section-title">Custom Watch</div>
+                            <div class="ram-custom-input">
+                                <input type="text" id="ram-custom-addr" placeholder="Address (hex, e.g. 04BF)">
+                                <button id="ram-custom-add">Add</button>
+                            </div>
+                            <div class="ram-grid" id="ram-custom"></div>
+                        </div>
+                        <div class="ram-section">
+                            <div class="ram-section-title">RAM Search</div>
+                            <div class="ram-search-controls">
+                                <button id="ram-search-snapshot">Snapshot</button>
+                                <button id="ram-search-changed" disabled>Find Changed</button>
+                                <button id="ram-search-unchanged" disabled>Find Unchanged</button>
+                                <button id="ram-search-reset" disabled>Reset</button>
+                            </div>
+                            <div class="chr-tile-info" id="ram-search-info">Take a snapshot, then perform an action in-game, then search</div>
+                            <div class="ram-grid" id="ram-search-results"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

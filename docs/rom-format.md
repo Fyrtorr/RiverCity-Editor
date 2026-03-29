@@ -350,6 +350,18 @@ Note: Stats are 4 bytes apart (P1 and P2 are adjacent, with 2 unused bytes betwe
 
 Maximum in-game money: $999.99. The cents and dollar digits use decimal-as-hex encoding (byte 0x99 = 99 in decimal, stored as raw value 153).
 
+### Game State (RAM)
+
+| Address | Description |
+|---------|-------------|
+| $04E1 | Current location ID |
+| $04F5 | Player 1 character ID (boss type for bosses) |
+| $04F6 | Player 2 character ID |
+| $04F9 | Player 1 character type (0-8 = gang member slot, 9-22 = boss) |
+| $04FA | Player 2 character type |
+| $0519 | Enemy configuration byte (loaded from $B999 table) |
+| $064C | Difficulty progression level (indexes scaling table at PRG4 $B946) |
+
 ---
 
 ## Known ROM Versions

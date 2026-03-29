@@ -512,14 +512,106 @@ main {
     color: var(--text-dim);
 }
 
-.emu-capture-panel {
+.emu-side-panel {
     flex: 1;
-    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+    min-width: 0;
+}
+
+.emu-side-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.emu-side-tab {
+    padding: 6px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.emu-side-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.emu-side-content {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    overflow-y: auto;
-    border-left: 1px solid var(--border);
+}
+
+.ram-section {
+    margin-bottom: 4px;
+}
+
+.ram-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+.ram-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+}
+
+.ram-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 2px;
+}
+
+.ram-entry .ram-label { color: var(--text-dim); }
+.ram-entry .ram-value { color: var(--text); font-weight: 600; }
+.ram-entry .ram-value.changed { color: #ffd700; }
+
+.ram-custom-input {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.ram-custom-input input {
+    flex: 1;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+}
+
+.ram-search-controls {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.ram-search-controls button {
+    font-size: 11px;
+    padding: 3px 8px;
 }
 
 #oam-canvas {
