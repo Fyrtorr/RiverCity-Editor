@@ -1764,6 +1764,50 @@
 
             oamInfo.textContent = `Captured ${sprites.length} sprites -> ${clusters.length} characters (${spriteSize === 16 ? '8x16' : '8x8'} mode)`;
 
+            // --- Read entity slots from RAM ---
+            const mem = nes.cpu.mem;
+            const STAT_BASES = [
+                { name: 'Punch', base: 0x049F },
+                { name: 'Kick', base: 0x04A3 },
+                { name: 'Weapon', base: 0x04A7 },
+                { name: 'Throw', base: 0x04AB },
+                { name: 'Agility', base: 0x04AF },
+                { name: 'Defence', base: 0x04B3 },
+                { name: 'Strength', base: 0x04B7 },
+                { name: 'WillPower', base: 0x04BB },
+                { name: 'Stamina', base: 0x04BF },
+                { name: 'MaxPower', base: 0x04C3 },
+            ];
+
+            const entities = [];
+            for (let slot = 0; slot < 4; slot++) {
+                const charId = mem[0x04F5 + slot];
+                const charType = mem[0x04F9 + slot];
+                const stats = {};
+                for (const s of STAT_BASES) {
+                    stats[s.name] = mem[s.base + slot];
+                }
+
+                // Determine name
+                let name = 'Unknown';
+                const slotLabel = slot === 0 ? 'Player 1' : slot === 1 ? 'Player 2' : `Enemy ${slot - 1}`;
+                if (charType >= 9 && charType <= 22) {
+                    // Boss: NPC name index = charType + 54
+                    const nameIdx = charType + 54;
+                    if (nameIdx < npcNames.length) name = npcNames[nameIdx];
+                } else if (charType <= 8) {
+                    // Gang member: charId might give us the actual NPC name
+                    // charId for gang members maps into the NPC name table differently
+                    // We can use charId directly if it's in the valid range
+                    if (charId < npcNames.length) name = npcNames[charId];
+                }
+
+                // Check if entity is active (non-zero stamina or type)
+                const active = stats.Stamina > 0 || stats.MaxPower > 0 || charType > 0;
+
+                entities.push({ slot, slotLabel, charId, charType, name, stats, active });
+            }
+
             // --- Render character cards ---
             const charLabel = $('#char-detect-label');
             const charList = $('#char-detect-list');
@@ -1794,6 +1838,11 @@
                 // Collect unique tile IDs
                 const tileIds = [...new Set(cl.map(s => s.tile))].sort((a, b) => a - b);
                 const palettes = [...new Set(cl.map(s => s.attr & 0x03))];
+
+                // Try to match this cluster to an entity slot
+                // We can't directly map OAM to entity by position without knowing
+                // entity screen coordinates, so show all active entities as context
+                // and let the user match by visual appearance
 
                 // Build card
                 const card = document.createElement('div');
@@ -1829,6 +1878,48 @@
                 card.appendChild(tilesDiv);
 
                 charList.appendChild(card);
+            }
+
+            // --- Active Entities panel ---
+            const activeEntities = entities.filter(e => e.active);
+            if (activeEntities.length > 0) {
+                const entLabel = document.createElement('div');
+                entLabel.className = 'chr-preview-label';
+                entLabel.style.marginTop = '12px';
+                entLabel.textContent = `Active Entities (${activeEntities.length} slots)`;
+                charList.appendChild(entLabel);
+
+                for (const ent of activeEntities) {
+                    const entCard = document.createElement('div');
+                    entCard.className = 'char-card';
+
+                    // Header with name and slot
+                    let typeDesc = '';
+                    if (ent.charType >= 9 && ent.charType <= 22) {
+                        typeDesc = `Boss (type ${ent.charType})`;
+                    } else if (ent.charType <= 8) {
+                        typeDesc = `Gang slot ${ent.charType}`;
+                    } else {
+                        typeDesc = `Type ${ent.charType}`;
+                    }
+
+                    let html = `<div class="char-card-title">${escHtml(ent.slotLabel)}: ${escHtml(ent.name)}</div>`;
+                    html += `<div class="char-card-meta">`;
+                    html += `ID: ${ent.charId} | ${typeDesc}<br>`;
+
+                    // Stats in a compact format
+                    const statParts = [];
+                    for (const s of STAT_BASES) {
+                        const v = ent.stats[s.name];
+                        if (v > 0 || s.name === 'Stamina' || s.name === 'MaxPower') {
+                            statParts.push(`${s.name}: <strong>${v}</strong>`);
+                        }
+                    }
+                    html += statParts.join(' | ');
+                    html += `</div>`;
+                    entCard.innerHTML = html;
+                    charList.appendChild(entCard);
+                }
             }
         });
 
