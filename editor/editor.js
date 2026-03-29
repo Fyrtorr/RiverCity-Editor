@@ -1649,11 +1649,13 @@
                 const flipH = spr.attr & 0x40;
                 const flipV = spr.attr & 0x80;
 
-                // Read sprite palette from PPU sprPalette
+                // Read sprite palette from PPU, using JSNES's own color table
+                const jsPal = nes.ppu.palTable.curTable;
                 const pal = [];
                 for (let c = 0; c < 4; c++) {
-                    const nesColor = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
-                    pal.push(RCR.NES_PALETTE[nesColor & 0x3F] || [0, 0, 0]);
+                    const nesIdx = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
+                    const rgb32 = jsPal[nesIdx & 0x3F] || 0;
+                    pal.push([(rgb32 >> 16) & 0xFF, (rgb32 >> 8) & 0xFF, rgb32 & 0xFF]);
                 }
 
                 // Get tile data from PPU VRAM pattern tables
