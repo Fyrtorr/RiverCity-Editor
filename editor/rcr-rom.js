@@ -687,6 +687,59 @@ const RCR = (() => {
         });
     }
 
+    // --- Sprite Collection Reader (PRG3 0x0000-0x3200) ---
+    function readSpriteCollection(rom) {
+        const bank = rom.prg[3];
+        const START = 0x0000;
+        const END = 0x3200;
+
+        // Pass 1: read sprite set pointers
+        let dataStart = END;
+        const setPtrs = [];
+        for (let pos = START; pos < END; pos += 2) {
+            if (pos >= dataStart) break;
+            const raw = bank[pos] + (bank[pos + 1] << 8);
+            if (raw === 0) { setPtrs.push(null); continue; }
+            const addr = raw & 0x3FFF;
+            dataStart = Math.min(dataStart, addr);
+            setPtrs.push(addr);
+        }
+
+        // Pass 2: read each sprite set's sprite entries
+        const validPtrs = setPtrs.filter(p => p !== null);
+        const lastSetStart = Math.max(...validPtrs);
+        let spriteDataStart = END;
+        const inlineSprites = new Set();
+        const spriteSets = [];
+
+        for (let i = 0; i < setPtrs.length; i++) {
+            const setAddr = setPtrs[i];
+            if (setAddr === null) { spriteSets.push(null); continue; }
+
+            // Find end: nearest higher address from other sets, inline sprites, or data region
+            let setEnd = spriteDataStart;
+            for (const a of validPtrs) { if (a > setAddr && a < setEnd) setEnd = a; }
+            for (const a of inlineSprites) { if (a > setAddr && a < setEnd) setEnd = a; }
+
+            const sprites = [];
+            for (let pos = setAddr; pos < setEnd; pos += 2) {
+                const raw = bank[pos] + (bank[pos + 1] << 8);
+                if (raw === 0) { sprites.push(null); continue; }
+                const addr = raw & 0x3FFF;
+                if (addr < lastSetStart) {
+                    inlineSprites.add(addr);
+                } else {
+                    spriteDataStart = Math.min(addr, spriteDataStart);
+                }
+                setEnd = Math.min(setEnd, addr);
+                sprites.push({ flags: bank[addr], tileCount: bank[addr + 1] });
+            }
+            spriteSets.push(sprites);
+        }
+
+        return spriteSets;
+    }
+
     // --- ROM Save ---
     function buildROM(rom) {
         const totalSize = HEADER_SIZE + rom.prgCount * PRG_BANK_SIZE + rom.chrCount * CHR_BANK_SIZE;
@@ -796,5 +849,6 @@ const RCR = (() => {
         GRAYSCALE_PALETTE,
         decodeTile,
         readROMPalettes,
+        readSpriteCollection,
     };
 })();

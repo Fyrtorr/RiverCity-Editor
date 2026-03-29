@@ -446,6 +446,29 @@ main {
     border-color: var(--accent);
 }
 
+/* Sprite Viewer */
+.sprite-view-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sprite-canvas-area {
+    flex: 1;
+    overflow: auto;
+    padding: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+#sprite-canvas {
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 16px 16px;
+}
+
 /* Hex panel */
 #hex-panel {
     height: 220px;

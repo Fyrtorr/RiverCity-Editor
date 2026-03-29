@@ -27,6 +27,7 @@
         <button class="tab" data-tab="locations">Locations</button>
         <button class="tab" data-tab="misc-text">Misc Text</button>
         <button class="tab" data-tab="chr-tiles">CHR Tiles</button>
+        <button class="tab" data-tab="sprites">Sprites</button>
     </nav>
 
     <main id="editor-area">
@@ -215,6 +216,31 @@
                     <canvas id="chr-detail-canvas" width="256" height="256"></canvas>
                     <div class="chr-tile-info" id="chr-tile-info">Click a tile to inspect it</div>
                     <div class="chr-palette-preview" id="chr-palette-preview"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-sprites" class="tab-content" hidden>
+            <div class="chr-layout">
+                <div class="list-panel" style="width:260px">
+                    <div class="list-header">Sprite Sets <span class="count" id="sprite-set-count"></span> <span class="readonly-badge">Read Only</span></div>
+                    <ul class="item-list" id="sprite-set-list"></ul>
+                </div>
+                <div class="sprite-view-panel">
+                    <div class="chr-toolbar">
+                        <label>CHR Bank:
+                            <select id="sprite-chr-bank-select"></select>
+                        </label>
+                        <label>Palette:
+                            <select id="sprite-palette-select">
+                                <option value="-1">Grayscale</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="sprite-canvas-area">
+                        <canvas id="sprite-canvas" width="512" height="512"></canvas>
+                    </div>
+                    <div class="chr-tile-info" id="sprite-info">Select a sprite set</div>
                 </div>
             </div>
         </div>

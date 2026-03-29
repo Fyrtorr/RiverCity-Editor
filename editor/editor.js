@@ -15,6 +15,7 @@
     let miscText = [];
     let locations = [];
     let romPalettes = [];
+    let spriteSets = [];
 
     // --- DOM refs ---
     const $ = (sel) => document.querySelector(sel);
@@ -95,6 +96,7 @@
             miscText = RCR.readMiscText(rom);
             locations = RCR.readLocations(rom);
             romPalettes = RCR.readROMPalettes(rom);
+            spriteSets = RCR.readSpriteCollection(rom);
 
             // Populate editors
             populateNPCNames();
@@ -106,6 +108,7 @@
             populateMiscText();
             populateLocations();
             populateCHRViewer();
+            populateSpriteViewer();
         } catch (err) {
             console.error('Error parsing ROM data:', err);
             status('Error parsing ROM: ' + err.message);
@@ -1306,6 +1309,166 @@
         });
 
         refresh();
+    }
+
+    // =============================================
+    // Sprite Viewer
+    // =============================================
+    function populateSpriteViewer() {
+        const list = $('#sprite-set-list');
+        const countEl = $('#sprite-set-count');
+        const bankSelect = $('#sprite-chr-bank-select');
+        const paletteSelect = $('#sprite-palette-select');
+        const canvas = $('#sprite-canvas');
+        const infoEl = $('#sprite-info');
+        const ctx = canvas.getContext('2d');
+
+        list.innerHTML = '';
+        countEl.textContent = `(${spriteSets.length})`;
+
+        // Populate bank/palette selectors
+        bankSelect.innerHTML = '';
+        for (let i = 0; i < rom.chrCount; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `Bank ${i}`;
+            bankSelect.appendChild(opt);
+        }
+        // Default to bank 8 which typically has character sprites
+        bankSelect.value = '8';
+
+        paletteSelect.innerHTML = '<option value="-1">Grayscale</option>';
+        romPalettes.forEach((pal, i) => {
+            if (!pal) return;
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `Palette ${i}`;
+            paletteSelect.appendChild(opt);
+        });
+
+        let selectedSet = -1;
+        let subPalIdx = 0;
+
+        function getSprPalette() {
+            const palIdx = parseInt(paletteSelect.value);
+            if (palIdx < 0 || !romPalettes[palIdx]) return RCR.GRAYSCALE_PALETTE;
+            const pal = romPalettes[palIdx];
+            const base = subPalIdx * 4;
+            return [pal.colors[base], pal.colors[base + 1], pal.colors[base + 2], pal.colors[base + 3]];
+        }
+
+        // Build sprite set list
+        spriteSets.forEach((set, i) => {
+            const li = document.createElement('li');
+            const count = set ? set.length : 0;
+            const label = set ? `Set ${i} (${count} sprites)` : `Set ${i} (empty)`;
+            li.innerHTML = `<span class="index">${i}</span><span class="label">${label}</span>`;
+            if (!set) li.style.opacity = '0.4';
+            li.addEventListener('click', () => selectSet(i));
+            list.appendChild(li);
+        });
+
+        function selectSet(i) {
+            selectedSet = i;
+            list.querySelectorAll('li').forEach((li, j) => li.classList.toggle('selected', j === i));
+            renderSpriteSet();
+        }
+
+        function renderSpriteSet() {
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (selectedSet < 0 || !spriteSets[selectedSet]) {
+                infoEl.textContent = 'Select a sprite set';
+                return;
+            }
+
+            const set = spriteSets[selectedSet];
+            const chrBankIdx = parseInt(bankSelect.value);
+            const chrBank = rom.chr[chrBankIdx];
+            const pal = getSprPalette();
+
+            // Each sprite entry has flags and tileCount
+            // tileCount indicates how many 8x8 tiles this sprite uses
+            // Render each sprite's tiles in a grid layout
+            const SCALE = 4;
+            const TILE_PX = 8 * SCALE;
+            const COLS = Math.min(8, set.length);
+            const GAP = 4;
+
+            let x = 0, y = 0;
+            let maxRowH = 0;
+
+            // Resize canvas to fit
+            const totalW = Math.min(set.length, COLS) * (TILE_PX + GAP);
+            canvas.width = Math.max(256, totalW);
+            canvas.height = Math.max(256, Math.ceil(set.length / COLS) * (TILE_PX * 2 + GAP));
+            ctx.imageSmoothingEnabled = false;
+
+            // Draw a checkerboard background
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let si = 0; si < set.length; si++) {
+                const sprite = set[si];
+                if (!sprite) {
+                    x += TILE_PX + GAP;
+                    if ((si + 1) % COLS === 0) { x = 0; y += TILE_PX * 2 + GAP; }
+                    continue;
+                }
+
+                // The flags byte contains sprite rendering info
+                // The tileCount byte is the starting tile index in the CHR bank
+                // Render the tile at the given index
+                const tileIdx = sprite.tileCount;
+
+                // In 8x16 sprite mode (common for RCR), each sprite is 2 tiles stacked
+                // Render the tile and the one below it
+                for (let t = 0; t < 2; t++) {
+                    const idx = tileIdx + t;
+                    if (idx >= 512) break;
+                    const pixels = RCR.decodeTile(chrBank, idx);
+
+                    const tmp = new OffscreenCanvas(8, 8);
+                    const tmpCtx = tmp.getContext('2d');
+                    const imgData = tmpCtx.createImageData(8, 8);
+                    for (let p = 0; p < 64; p++) {
+                        const ci = pixels[p];
+                        const [r, g, b] = pal[ci];
+                        imgData.data[p * 4] = r;
+                        imgData.data[p * 4 + 1] = g;
+                        imgData.data[p * 4 + 2] = b;
+                        imgData.data[p * 4 + 3] = ci === 0 ? 20 : 255;
+                    }
+                    tmpCtx.putImageData(imgData, 0, 0);
+
+                    // Apply flip based on flags
+                    ctx.save();
+                    const dx = x;
+                    const dy = y + t * TILE_PX;
+                    const flipH = sprite.flags & 0x40;
+                    const flipV = sprite.flags & 0x80;
+
+                    if (flipH || flipV) {
+                        ctx.translate(dx + (flipH ? TILE_PX : 0), dy + (flipV ? TILE_PX : 0));
+                        ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+                        ctx.drawImage(tmp, 0, 0, TILE_PX, TILE_PX);
+                    } else {
+                        ctx.drawImage(tmp, dx, dy, TILE_PX, TILE_PX);
+                    }
+                    ctx.restore();
+                }
+
+                x += TILE_PX + GAP;
+                if ((si + 1) % COLS === 0) { x = 0; y += TILE_PX * 2 + GAP; }
+            }
+
+            infoEl.innerHTML = `Set ${selectedSet}: ${set.length} sprites | CHR Bank ${chrBankIdx}<br>` +
+                `Flags byte encodes: bit6=H-flip, bit7=V-flip, bits0-1=palette`;
+        }
+
+        bankSelect.addEventListener('change', renderSpriteSet);
+        paletteSelect.addEventListener('change', renderSpriteSet);
     }
 
     // Hex view for CHR banks (similar to showHex but for CHR data)
