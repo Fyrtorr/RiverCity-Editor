@@ -191,22 +191,29 @@ Stat value bytes appear in the ROM in the order the flags are checked (SG, D, AG
 | Address | End | Type | Count | Description |
 |---------|-----|------|-------|-------------|
 | 0x35F1 | 0x36A9 | Pointer table + dec-as-hex lists | 35 | Gang spawn probability per location |
-| 0x39D6 | 0x3A27 | Stat templates | 9 x 9 bytes | Gang member specialization templates (unconfirmed) |
-| 0x3A27 | 0x3AA5 | Stats block | 9 x 9 bytes | Boss combat stats |
+| 0x3946 | 0x3999 | Byte array | varies | Difficulty scaling offsets |
+| 0x3999 | 0x39D6 | Byte arrays | varies | Enemy configuration and lookup tables |
+| 0x39D6 | 0x3A27 | Stat templates | 9 x 9 bytes | Gang member specialization templates (confirmed) |
+| 0x3A27 | 0x3AA5 | Stats block | 14 x 9 bytes | Boss combat stats (types 9-22) |
 
-**Boss Stats** — 9 stat blocks of 9 bytes each. The stat byte order used by the barf-master project is: Punch, Kick, Weapon, Throw, Agility, Defence, Strength, WillPower, Stamina. Raw ROM values are shown below.
+**Boss Stats** — 14 stat blocks of 9 bytes each (types 9-22 in the unified character type table). Stat byte order (confirmed by disassembly): Punch, Kick, Weapon, Throw, Agility, Defence, Strength, WillPower, Stamina.
 
-| Index | Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 | Byte 8 |
-|-------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
-| 0 | 26 | 35 | 23 | 28 | 25 | 25 | 22 | 24 | 52 |
-| 1 | 39 | 38 | 45 | 33 | 39 | 39 | 36 | 36 | 74 |
-| 2 | 40 | 39 | 36 | 34 | 47 | 40 | 35 | 35 | 72 |
-| 3 | 34 | 34 | 31 | 45 | 32 | 33 | 31 | 31 | 70 |
-| 4 | 28 | 27 | 29 | 26 | 39 | 29 | 25 | 26 | 46 |
-| 5 | 28 | 27 | 29 | 27 | 30 | 37 | 25 | 25 | 48 |
-| 6 | 39 | 39 | 37 | 35 | 38 | 39 | 45 | 34 | 72 |
-| 7 | 42 | 41 | 38 | 37 | 40 | 50 | 37 | 36 | 78 |
-| 8 | 45 | 46 | 42 | 40 | 43 | 44 | 42 | 42 | 104 |
+| Type | Boss | Punch | Kick | Weapon | Throw | Agility | Defence | Strength | WillPower | Stamina |
+|------|------|-------|------|--------|-------|---------|---------|----------|-----------|---------|
+| 9 | MOOSE | 26 | 35 | 23 | 28 | 25 | 25 | 22 | 24 | 52 |
+| 10 | MOJO | 39 | 38 | 45 | 33 | 39 | 39 | 36 | 36 | 74 |
+| 11 | TURK | 40 | 39 | 36 | 34 | 47 | 40 | 35 | 35 | 72 |
+| 12 | ROCKO | 34 | 34 | 31 | 45 | 32 | 33 | 31 | 31 | 70 |
+| 13 | BENNY | 28 | 27 | 29 | 26 | 39 | 29 | 25 | 26 | 46 |
+| 14 | CLYDE | 28 | 27 | 29 | 27 | 30 | 37 | 25 | 25 | 48 |
+| 15 | BLADE | 39 | 39 | 37 | 35 | 38 | 39 | 45 | 34 | 72 |
+| 16 | THOR | 42 | 41 | 38 | 37 | 40 | 50 | 37 | 36 | 78 |
+| 17 | OTIS | 45 | 46 | 42 | 40 | 43 | 44 | 42 | 42 | 104 |
+| 18 | IVAN | 51 | 48 | 44 | 47 | 47 | 58 | 44 | 48 | 90 |
+| 19 | TEX | 49 | 45 | 61 | 49 | 49 | 48 | 48 | 50 | 102 |
+| 20 | RANDY | 52 | 62 | 49 | 48 | 53 | 53 | 50 | 50 | 102 |
+| 21 | ANDY | 62 | 52 | 50 | 47 | 52 | 53 | 51 | 49 | 104 |
+| 22 | SIMON | 61 | 62 | 59 | 56 | 59 | 60 | 58 | 63 | 118 |
 
 > **Stat byte order — CONFIRMED by disassembly.** The game code at PRG4 $B83E-$B883 loads
 > each template byte sequentially and stores them to RAM addresses that the cheating guide
@@ -216,11 +223,15 @@ Stat value bytes appear in the ROM in the order the flags are checked (SG, D, AG
 > byte 8 -> $04BF (Stamina). The barf-master project's stat order is correct.
 > The EnemyStatusList fan document had Throw and Strength values transposed in its listings.
 
-> **Open question: Boss index-to-name mapping.** The ROM stores 9 anonymous stat blocks. The
-> barf-master project labels them: Rocko, Blade, Turk, Mojo, Thor, Ivan, Otis, Tex, Simon.
-> The EnemyStatusList suggests a different mapping (index 0 = Moose, 1 = Mojo, 3 = Rocko, etc.)
-> based on stat value matching. The game has 14 named bosses but only 9 stat blocks, suggesting
-> some bosses share stats or derive them at runtime. Confirming this requires game code disassembly.
+> **Boss index-to-name mapping — CONFIRMED by disassembly.** There are actually **14 boss
+> stat blocks** (not 9 as previously assumed), stored contiguously as character types 9-22.
+> The game treats gang member templates (types 0-8) and boss stats (types 9-22) as a single
+> unified table at $B9D6, indexed by `type * 9`. The boss type number directly corresponds
+> to the NPC name table order: type 9 = NPC 63 (MOOSE), type 10 = NPC 64 (MOJO), etc.
+> The barf-master project only exposed 9 of the 14 boss stat blocks.
+>
+> Verified by matching ROM stat values against the EnemyStatusList fan document:
+> 12 of 14 bosses match exactly, 2 have 1-byte differences (likely document typos).
 
 **Gang Member Specialization Templates (unconfirmed)** — At 0x39D6, immediately before the boss stats, there appear to be 9 blocks of 9 bytes each (81 bytes total). Each block has one stat value elevated to 14 while others are in the 4-6 range, with the elevated stat rotating across blocks:
 
@@ -366,7 +377,7 @@ Check PRG bank 7 at offsets 0x0AFD-0x0AFF. If the bytes are `E8 8A 29`, it's the
 | Shop Names | 24 | Yes (in-place) |
 | Shop Items | 128 | Yes (name, price, stat values) |
 | Shop Stock Lists | 30 | Read-only |
-| Boss Stats | 9 bosses x 9 stats | Yes |
+| Boss Stats | 14 bosses x 9 stats | Yes |
 | Boss Cash Rewards | 9 | Yes |
 | Gang Member Templates | 9 slots x 9 stats | Not yet (confirmed by disassembly) |
 | Gang Cash Rewards | 9 | Yes |

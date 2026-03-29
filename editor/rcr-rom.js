@@ -61,8 +61,8 @@ const RCR = (() => {
             names: { rom: 'prg', bank: 2, start: 0x1C0C, end: 0x1DBE, count: 24, ptrOR: 0, base: 'data_start' },
         },
         bosses: {
-            stats: { bank: 4, start: 0x3A27, end: 0x3AA5, count: 9 },
-            cash:  { bank: 7, start: 0x2C3C, end: 0x2C54, count: 9 }, // 0x2C2A + 9*2
+            stats: { bank: 4, start: 0x3A27, end: 0x3AA5, count: 14 },
+            cash:  { bank: 7, start: 0x2C3C, end: 0x2C58, count: 14 },
         },
         gangs: {
             cash:       { bank: 7, start: 0x2C2A, end: 0x2C3C, count: 9 },
@@ -435,7 +435,7 @@ const RCR = (() => {
 
     // --- Boss Stats ---
     const BOSS_STAT_NAMES = ['Punch','Kick','Weapon','Throw','Agility','Defence','Strength','WillPower','Stamina'];
-    const BOSS_NAMES = ['Rocko','Blade','Turk','Mojo','Thor','Ivan','Otis','Tex','Simon'];
+    const BOSS_NAMES = ['Moose','Mojo','Turk','Rocko','Benny','Clyde','Blade','Thor','Otis','Ivan','Tex','Randy','Andy','Simon'];
 
     function readBossStats(rom) {
         const info = addresses.bosses.stats;
