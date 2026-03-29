@@ -1635,12 +1635,12 @@
                 sprites.push({ y: y + 1, tile, attr, x, index: i });
             }
 
-            // Render captured sprites on the OAM canvas
+            // Render captured sprites on the OAM canvas (matching NES screen at 2x)
             oamCtx.imageSmoothingEnabled = false;
             oamCanvas.width = 512;
-            oamCanvas.height = 300;
+            oamCanvas.height = 480;
             oamCtx.fillStyle = '#111';
-            oamCtx.fillRect(0, 0, 512, 300);
+            oamCtx.fillRect(0, 0, 512, 480);
 
             // Draw sprites at their actual screen positions (scaled 2x)
             const SCALE = 2;
