@@ -186,26 +186,75 @@ Stat value bytes appear in the ROM in the order the flags are checked (SG, D, AG
 
 **Misc Text** — 131 strings including action descriptions ("@ ate the |."), stat-up messages ("PUNCH is up by[."), location names, and UI text. The `@` `|` `[` characters are variable placeholders.
 
-### PRG Bank 4 — Boss Stats + Gang Probability
+### PRG Bank 4 — Gang Member Templates + Boss Stats + Gang Probability
 
 | Address | End | Type | Count | Description |
 |---------|-----|------|-------|-------------|
 | 0x35F1 | 0x36A9 | Pointer table + dec-as-hex lists | 35 | Gang spawn probability per location |
-| 0x3A27 | 0x3AA5 | Stats block | 9 | Boss combat stats (9 bytes per boss) |
+| 0x39D6 | 0x3A27 | Stat templates | 9 x 9 bytes | Gang member specialization templates (unconfirmed) |
+| 0x3A27 | 0x3AA5 | Stats block | 9 x 9 bytes | Boss combat stats |
 
-**Boss Stats** — 9 bosses x 9 bytes. Each byte is a raw stat value (0-255), stored in order: Punch, Kick, Weapon, Throw, Agility, Defence, Strength, WillPower, Stamina.
+**Boss Stats** — 9 stat blocks of 9 bytes each. The stat byte order used by the barf-master project is: Punch, Kick, Weapon, Throw, Agility, Defence, Strength, WillPower, Stamina. Raw ROM values are shown below.
 
-| Index | Boss | Punch | Kick | Weapon | Throw | Agility | Defence | Strength | WillPower | Stamina |
-|-------|------|-------|------|--------|-------|---------|---------|----------|-----------|---------|
-| 0 | Rocko | 26 | 35 | 23 | 28 | 25 | 25 | 22 | 24 | 52 |
-| 1 | Blade | 39 | 38 | 45 | 33 | 39 | 39 | 36 | 36 | 74 |
-| 2 | Turk | 40 | 39 | 36 | 34 | 47 | 40 | 35 | 35 | 72 |
-| 3 | Mojo | 34 | 34 | 31 | 45 | 32 | 33 | 31 | 31 | 70 |
-| 4 | Thor | 28 | 27 | 29 | 26 | 39 | 29 | 25 | 26 | 46 |
-| 5 | Ivan | 28 | 27 | 29 | 27 | 30 | 37 | 25 | 25 | 48 |
-| 6 | Otis | 39 | 39 | 37 | 35 | 38 | 39 | 45 | 34 | 72 |
-| 7 | Tex | 42 | 41 | 38 | 37 | 40 | 50 | 37 | 36 | 78 |
-| 8 | Simon | 45 | 46 | 42 | 40 | 43 | 44 | 42 | 42 | 104 |
+| Index | Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 | Byte 8 |
+|-------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
+| 0 | 26 | 35 | 23 | 28 | 25 | 25 | 22 | 24 | 52 |
+| 1 | 39 | 38 | 45 | 33 | 39 | 39 | 36 | 36 | 74 |
+| 2 | 40 | 39 | 36 | 34 | 47 | 40 | 35 | 35 | 72 |
+| 3 | 34 | 34 | 31 | 45 | 32 | 33 | 31 | 31 | 70 |
+| 4 | 28 | 27 | 29 | 26 | 39 | 29 | 25 | 26 | 46 |
+| 5 | 28 | 27 | 29 | 27 | 30 | 37 | 25 | 25 | 48 |
+| 6 | 39 | 39 | 37 | 35 | 38 | 39 | 45 | 34 | 72 |
+| 7 | 42 | 41 | 38 | 37 | 40 | 50 | 37 | 36 | 78 |
+| 8 | 45 | 46 | 42 | 40 | 43 | 44 | 42 | 42 | 104 |
+
+> **Stat byte order — CONFIRMED by disassembly.** The game code at PRG4 $B83E-$B883 loads
+> each template byte sequentially and stores them to RAM addresses that the cheating guide
+> independently identified. The mapping is: byte 0 -> $049F (Punch), byte 1 -> $04A3 (Kick),
+> byte 2 -> $04A7 (Weapon), byte 3 -> $04AB (Throw), byte 4 -> $04AF (Agility),
+> byte 5 -> $04B3 (Defence), byte 6 -> $04B7 (Strength), byte 7 -> $04BB (WillPower),
+> byte 8 -> $04BF (Stamina). The barf-master project's stat order is correct.
+> The EnemyStatusList fan document had Throw and Strength values transposed in its listings.
+
+> **Open question: Boss index-to-name mapping.** The ROM stores 9 anonymous stat blocks. The
+> barf-master project labels them: Rocko, Blade, Turk, Mojo, Thor, Ivan, Otis, Tex, Simon.
+> The EnemyStatusList suggests a different mapping (index 0 = Moose, 1 = Mojo, 3 = Rocko, etc.)
+> based on stat value matching. The game has 14 named bosses but only 9 stat blocks, suggesting
+> some bosses share stats or derive them at runtime. Confirming this requires game code disassembly.
+
+**Gang Member Specialization Templates (unconfirmed)** — At 0x39D6, immediately before the boss stats, there appear to be 9 blocks of 9 bytes each (81 bytes total). Each block has one stat value elevated to 14 while others are in the 4-6 range, with the elevated stat rotating across blocks:
+
+| Block | Elevated Stat (position) | Pattern |
+|-------|--------------------------|---------|
+| 0 | Byte 0 = 14 | Punch specialist |
+| 1 | Byte 1 = 14 | Kick specialist |
+| 2 | Byte 2 = 14 | Weapon specialist |
+| 3 | Byte 3 = 14 | Byte 3 specialist |
+| 4 | Byte 4 = 14 | Byte 4 specialist |
+| 5 | Byte 5 = 14 | Byte 5 specialist |
+| 6 | Byte 6 = 14 | Byte 6 specialist |
+| 7 | Byte 7 = 14 | WillPower specialist |
+| 8 | Byte 8 = 28 | Stamina specialist (leader) |
+
+This pattern matches the in-game behavior where each gang has 9 members, each specializing
+in one stat. The "14" value is a base template that the game scales per-gang through a
+subroutine at PRG4 $B900. The 9th member (gang leader) always has the highest stamina.
+
+**Confirmed by disassembly.** The code at PRG4 $B832-$B88C calculates a member's stat slot
+index as `(gang_member_type * 8) + gang_member_type` (i.e., `* 9`) and uses it as Y-index
+into the template table at $B9D6. Each template byte is passed through the scaling subroutine
+at $B900, which adds a difficulty modifier (from $B946,Y indexed by a game progression value
+at RAM $064C) and clamps stats to max 63 (0x3F), or max 127 (0x7F) for stamina.
+
+**Additional data tables in the region:**
+
+| Address | End | Description |
+|---------|-----|-------------|
+| 0x3946 | 0x3999 | Difficulty scaling offsets (indexed by progression level) |
+| 0x3999 | 0x39A2 | Enemy configuration data (referenced at $B820) |
+| 0x39A2 | 0x39D6 | Additional enemy/gang lookup tables |
+| 0x39D6 | 0x3A27 | Gang member stat templates (9 x 9 bytes, confirmed) |
+| 0x3A27 | 0x3AA5 | Boss stat blocks (9 x 9 bytes) |
 
 **Gang Spawn Probability** — Per-location arrays of percentages (one per gang, stored as Decimal-as-Hex). Terminated by value 99 (byte `0x63`).
 
@@ -259,6 +308,39 @@ $99.95 = 9995 cents -> bytes: 0x95, 0x99, 0x00
 
 ---
 
+## RAM Layout (from Cheating Guide + Disassembly)
+
+The NES RAM addresses for player/NPC stats were documented in the "Ultimate Cheating Guide" by proVEREN (2002) and confirmed by disassembly of the stat-loading code at PRG4 $B83E-$B88C.
+
+### Player Stats (RAM)
+
+| Stat | Player 1 | Player 2 | Max Value |
+|------|----------|----------|-----------|
+| Punch | $049F | $04A0 | 63 |
+| Kick | $04A3 | $04A4 | 63 |
+| Weapon | $04A7 | $04A8 | 63 |
+| Throwing | $04AB | $04AC | 63 |
+| Agility | $04AF | $04B0 | 63 |
+| Defense | $04B3 | $04B4 | 63 |
+| Strength | $04B7 | $04B8 | 63 |
+| Will Power | $04BB | $04BC | 63 |
+| Stamina | $04BF | $04C0 | 126 |
+| Max Power | $04C3 | $04C4 | 126 |
+
+Note: Stats are 4 bytes apart (P1 and P2 are adjacent, with 2 unused bytes between stat groups). Max stat value is 63 (0x3F) for combat stats, enforced by the scaling subroutine at PRG4 $B900 via `CMP #$40`. Stamina max is 127 (0x7F), enforced via `CMP #$80` in the parallel subroutine at $B923.
+
+### Money (RAM)
+
+| Digits | Player 1 | Player 2 | Max Value | Encoding |
+|--------|----------|----------|-----------|----------|
+| Cents ($0.xx) | $04C7 | $04CA | 153 (= hex 0x99) | Decimal-as-hex |
+| Dollars ($xx.00) | $04C8 | $04CB | 153 (= hex 0x99) | Decimal-as-hex |
+| Hundreds ($x00.00) | $04C9 | $04CC | 9 | Plain decimal |
+
+Maximum in-game money: $999.99. The cents and dollar digits use decimal-as-hex encoding (byte 0x99 = 99 in decimal, stored as raw value 153).
+
+---
+
 ## Known ROM Versions
 
 | Title | Region | MD5 Hash |
@@ -286,6 +368,7 @@ Check PRG bank 7 at offsets 0x0AFD-0x0AFF. If the bytes are `E8 8A 29`, it's the
 | Shop Stock Lists | 30 | Read-only |
 | Boss Stats | 9 bosses x 9 stats | Yes |
 | Boss Cash Rewards | 9 | Yes |
+| Gang Member Templates | 9 slots x 9 stats | Not yet (confirmed by disassembly) |
 | Gang Cash Rewards | 9 | Yes |
 | Gang Turf Codes | 9 | Yes |
 | Locations | 35 | Yes (music, boundaries, pacifist, reincarnation) |
