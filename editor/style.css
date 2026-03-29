@@ -622,6 +622,58 @@ main {
     max-width: 512px;
 }
 
+/* Character detection cards */
+.char-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 8px;
+}
+
+.char-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.char-card-header canvas {
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    background: #111;
+    flex-shrink: 0;
+}
+
+.char-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.char-card-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+.char-card-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 6px;
+}
+
+.char-card-tiles .tile-badge {
+    font-size: 10px;
+    font-family: Consolas, monospace;
+    background: var(--bg-input);
+    color: var(--text-dim);
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+}
+
 /* Hex panel */
 #hex-panel {
     height: 220px;

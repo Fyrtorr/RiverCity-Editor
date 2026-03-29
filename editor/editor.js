@@ -1615,14 +1615,81 @@
             if (!nes) return;
 
             // Pause for capture
-            const wasRunning = emuRunning;
             emuRunning = false;
             if (emuRafId) cancelAnimationFrame(emuRafId);
             btnPlay.disabled = false;
             btnPause.disabled = true;
             emuStatus.textContent = 'Paused (OAM captured)';
 
-            // Read OAM from PPU - JSNES stores sprite RAM in ppu.spriteMem (256 bytes)
+            const spriteSize = nes.ppu.f_spriteSize ? 16 : 8;
+            const SCALE = 2;
+
+            // --- Helper: get palette for a sprite ---
+            function getSprPal(palIdx) {
+                const pal = [];
+                for (let c = 0; c < 4; c++) {
+                    const bgr32 = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
+                    pal.push([bgr32 & 0xFF, (bgr32 >> 8) & 0xFF, (bgr32 >> 16) & 0xFF]);
+                }
+                return pal;
+            }
+
+            // --- Helper: render one sprite tile to an offscreen canvas ---
+            function renderSpriteTile(spr, tileOffset) {
+                let tileAddr;
+                if (spriteSize === 16) {
+                    const bank = (spr.tile & 1) * 0x1000;
+                    tileAddr = bank + (spr.tile & 0xFE) * 16 + tileOffset * 16;
+                } else {
+                    const bank = nes.ppu.f_spPatternTable * 0x1000;
+                    tileAddr = bank + spr.tile * 16;
+                }
+                const pal = getSprPal(spr.attr & 0x03);
+                const tmp = new OffscreenCanvas(8, 8);
+                const tmpCtx = tmp.getContext('2d');
+                const imgData = tmpCtx.createImageData(8, 8);
+                for (let py = 0; py < 8; py++) {
+                    const lo = nes.ppu.vramMem[tileAddr + py];
+                    const hi = nes.ppu.vramMem[tileAddr + 8 + py];
+                    for (let px = 0; px < 8; px++) {
+                        const bit0 = (lo >> (7 - px)) & 1;
+                        const bit1 = (hi >> (7 - px)) & 1;
+                        const ci = (bit1 << 1) | bit0;
+                        const [r, g, b] = pal[ci];
+                        const idx = (py * 8 + px) * 4;
+                        imgData.data[idx] = r;
+                        imgData.data[idx + 1] = g;
+                        imgData.data[idx + 2] = b;
+                        imgData.data[idx + 3] = ci === 0 ? 0 : 255;
+                    }
+                }
+                tmpCtx.putImageData(imgData, 0, 0);
+                return tmp;
+            }
+
+            // --- Helper: draw a sprite onto a context with flip ---
+            function drawSpriteToCtx(ctx, spr, dx, dy, scale) {
+                const flipH = spr.attr & 0x40;
+                const flipV = spr.attr & 0x80;
+                const tileCount = spriteSize === 16 ? 2 : 1;
+                for (let t = 0; t < tileCount; t++) {
+                    const tmp = renderSpriteTile(spr, t);
+                    const tileY = flipV ? (tileCount - 1 - t) : t;
+                    const sx = dx;
+                    const sy = dy + tileY * 8 * scale;
+                    ctx.save();
+                    if (flipH || flipV) {
+                        ctx.translate(sx + (flipH ? 8 * scale : 0), sy + (flipV ? 8 * scale : 0));
+                        ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+                        ctx.drawImage(tmp, 0, 0, 8 * scale, 8 * scale);
+                    } else {
+                        ctx.drawImage(tmp, sx, sy, 8 * scale, 8 * scale);
+                    }
+                    ctx.restore();
+                }
+            }
+
+            // --- Read OAM ---
             const oam = nes.ppu.spriteMem;
             const sprites = [];
             for (let i = 0; i < 64; i++) {
@@ -1630,92 +1697,139 @@
                 const tile = oam[i * 4 + 1];
                 const attr = oam[i * 4 + 2];
                 const x = oam[i * 4 + 3];
-                // Skip hidden sprites (Y >= 0xEF)
                 if (y >= 0xEF) continue;
                 sprites.push({ y: y + 1, tile, attr, x, index: i });
             }
 
-            // Render captured sprites on the OAM canvas (matching NES screen at 2x)
+            // --- Render all sprites on OAM canvas ---
             oamCtx.imageSmoothingEnabled = false;
             oamCanvas.width = 512;
             oamCanvas.height = 480;
             oamCtx.fillStyle = '#111';
             oamCtx.fillRect(0, 0, 512, 480);
 
-            // Draw sprites at their actual screen positions (scaled 2x)
-            const SCALE = 2;
-            const spriteSize = nes.ppu.f_spriteSize ? 16 : 8; // 8x8 or 8x16 mode
-
             for (const spr of sprites) {
-                // Get palette from attribute bits 0-1
-                const palIdx = spr.attr & 0x03;
-                const flipH = spr.attr & 0x40;
-                const flipV = spr.attr & 0x80;
-
-                // Read sprite palette from PPU
-                // JSNES stores pre-resolved colors with R/B swapped (0xBBGGRR)
-                const pal = [];
-                for (let c = 0; c < 4; c++) {
-                    const bgr32 = (c === 0) ? nes.ppu.imgPalette[0] : nes.ppu.sprPalette[palIdx * 4 + c];
-                    pal.push([bgr32 & 0xFF, (bgr32 >> 8) & 0xFF, (bgr32 >> 16) & 0xFF]);
-                }
-
-                // Get tile data from PPU VRAM pattern tables
-                const tileCount = spriteSize === 16 ? 2 : 1;
-
-                for (let t = 0; t < tileCount; t++) {
-                    let tileAddr;
-                    if (spriteSize === 16) {
-                        const bank = (spr.tile & 1) * 0x1000;
-                        tileAddr = bank + (spr.tile & 0xFE) * 16 + t * 16;
-                    } else {
-                        const bank = nes.ppu.f_spPatternTable * 0x1000;
-                        tileAddr = bank + spr.tile * 16;
-                    }
-
-                    // Decode tile from PPU vramMem
-                    const tmp = new OffscreenCanvas(8, 8);
-                    const tmpCtx = tmp.getContext('2d');
-                    const imgData = tmpCtx.createImageData(8, 8);
-
-                    for (let py = 0; py < 8; py++) {
-                        const lo = nes.ppu.vramMem[tileAddr + py];
-                        const hi = nes.ppu.vramMem[tileAddr + 8 + py];
-                        for (let px = 0; px < 8; px++) {
-                            const bit0 = (lo >> (7 - px)) & 1;
-                            const bit1 = (hi >> (7 - px)) & 1;
-                            const ci = (bit1 << 1) | bit0;
-                            const [r, g, b] = pal[ci];
-                            const idx = (py * 8 + px) * 4;
-                            imgData.data[idx] = r;
-                            imgData.data[idx + 1] = g;
-                            imgData.data[idx + 2] = b;
-                            imgData.data[idx + 3] = ci === 0 ? 0 : 255;
-                        }
-                    }
-                    tmpCtx.putImageData(imgData, 0, 0);
-
-                    // Draw with flip
-                    const dx = spr.x * SCALE;
-                    const tileY = flipV ? (tileCount - 1 - t) : t;
-                    const dy = (spr.y + tileY * 8) * SCALE;
-
-                    oamCtx.save();
-                    if (flipH || flipV) {
-                        oamCtx.translate(
-                            dx + (flipH ? 8 * SCALE : 0),
-                            dy + (flipV ? 8 * SCALE : 0)
-                        );
-                        oamCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-                        oamCtx.drawImage(tmp, 0, 0, 8 * SCALE, 8 * SCALE);
-                    } else {
-                        oamCtx.drawImage(tmp, dx, dy, 8 * SCALE, 8 * SCALE);
-                    }
-                    oamCtx.restore();
-                }
+                drawSpriteToCtx(oamCtx, spr, spr.x * SCALE, spr.y * SCALE, SCALE);
             }
 
-            oamInfo.textContent = `Captured ${sprites.length} visible sprites (${spriteSize === 16 ? '8x16' : '8x8'} mode)`;
+            // --- Cluster sprites into characters ---
+            // Two sprites belong to the same character if they're within threshold pixels
+            const CLUSTER_THRESHOLD = 12; // pixels gap tolerance
+            const clusters = [];
+            const assigned = new Set();
+
+            for (let i = 0; i < sprites.length; i++) {
+                if (assigned.has(i)) continue;
+                const cluster = [i];
+                assigned.add(i);
+                // BFS to find connected sprites
+                const queue = [i];
+                while (queue.length > 0) {
+                    const ci = queue.shift();
+                    const cs = sprites[ci];
+                    for (let j = 0; j < sprites.length; j++) {
+                        if (assigned.has(j)) continue;
+                        const os = sprites[j];
+                        const dx = Math.abs(cs.x - os.x);
+                        const dy = Math.abs(cs.y - os.y);
+                        if (dx <= CLUSTER_THRESHOLD && dy <= CLUSTER_THRESHOLD + spriteSize) {
+                            cluster.push(j);
+                            assigned.add(j);
+                            queue.push(j);
+                        }
+                    }
+                }
+                clusters.push(cluster.map(idx => sprites[idx]));
+            }
+
+            // Sort clusters by X position
+            clusters.sort((a, b) => {
+                const ax = Math.min(...a.map(s => s.x));
+                const bx = Math.min(...b.map(s => s.x));
+                return ax - bx;
+            });
+
+            // --- Draw bounding boxes on OAM canvas ---
+            const clusterColors = ['#e94560', '#4ecca3', '#ffd700', '#a0e0ff', '#ff6b81', '#b0f0b0', '#d0b0f0', '#f0cf af'];
+            for (let ci = 0; ci < clusters.length; ci++) {
+                const cl = clusters[ci];
+                const minX = Math.min(...cl.map(s => s.x));
+                const minY = Math.min(...cl.map(s => s.y));
+                const maxX = Math.max(...cl.map(s => s.x)) + 8;
+                const maxY = Math.max(...cl.map(s => s.y)) + spriteSize;
+                oamCtx.strokeStyle = clusterColors[ci % clusterColors.length];
+                oamCtx.lineWidth = 1;
+                oamCtx.strokeRect(minX * SCALE - 1, minY * SCALE - 1, (maxX - minX) * SCALE + 2, (maxY - minY) * SCALE + 2);
+            }
+
+            oamInfo.textContent = `Captured ${sprites.length} sprites -> ${clusters.length} characters (${spriteSize === 16 ? '8x16' : '8x8'} mode)`;
+
+            // --- Render character cards ---
+            const charLabel = $('#char-detect-label');
+            const charList = $('#char-detect-list');
+            charLabel.style.display = clusters.length > 0 ? 'block' : 'none';
+            charList.innerHTML = '';
+
+            for (let ci = 0; ci < clusters.length; ci++) {
+                const cl = clusters[ci];
+                const minX = Math.min(...cl.map(s => s.x));
+                const minY = Math.min(...cl.map(s => s.y));
+                const maxX = Math.max(...cl.map(s => s.x)) + 8;
+                const maxY = Math.max(...cl.map(s => s.y)) + spriteSize;
+                const w = maxX - minX;
+                const h = maxY - minY;
+
+                // Render isolated character
+                const charScale = 4;
+                const charCanvas = document.createElement('canvas');
+                charCanvas.width = w * charScale;
+                charCanvas.height = h * charScale;
+                const charCtx = charCanvas.getContext('2d');
+                charCtx.imageSmoothingEnabled = false;
+
+                for (const spr of cl) {
+                    drawSpriteToCtx(charCtx, spr, (spr.x - minX) * charScale, (spr.y - minY) * charScale, charScale);
+                }
+
+                // Collect unique tile IDs
+                const tileIds = [...new Set(cl.map(s => s.tile))].sort((a, b) => a - b);
+                const palettes = [...new Set(cl.map(s => s.attr & 0x03))];
+
+                // Build card
+                const card = document.createElement('div');
+                card.className = 'char-card';
+                card.style.borderLeftColor = clusterColors[ci % clusterColors.length];
+                card.style.borderLeftWidth = '3px';
+
+                const header = document.createElement('div');
+                header.className = 'char-card-header';
+                header.appendChild(charCanvas);
+
+                const info = document.createElement('div');
+                info.innerHTML =
+                    `<div class="char-card-title">Character ${ci + 1}</div>` +
+                    `<div class="char-card-meta">` +
+                    `Position: (${minX}, ${minY})<br>` +
+                    `Size: ${w}x${h} px (${cl.length} sprites)<br>` +
+                    `Palette: ${palettes.map(p => '#' + p).join(', ')}` +
+                    `</div>`;
+                header.appendChild(info);
+                card.appendChild(header);
+
+                // Tile badges
+                const tilesDiv = document.createElement('div');
+                tilesDiv.className = 'char-card-tiles';
+                for (const tid of tileIds) {
+                    const badge = document.createElement('span');
+                    badge.className = 'tile-badge';
+                    badge.textContent = '0x' + tid.toString(16).toUpperCase().padStart(2, '0');
+                    badge.title = `Tile $${tid.toString(16).toUpperCase()} — click to view in CHR Tiles tab`;
+                    tilesDiv.appendChild(badge);
+                }
+                card.appendChild(tilesDiv);
+
+                charList.appendChild(card);
+            }
         });
 
         // --- Side panel tab switching ---
